@@ -1,0 +1,179 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-stable
+  namespace: production
+spec:
+  selector:
+    app: nginx
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-canary
+  namespace: production
+spec:
+  selector:
+    app: nginx
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: nginx-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - nginx.example.com
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: nginx-vsvc
+  namespace: production
+spec:
+  hosts:
+    - nginx.example.com
+  gateways:
+    - istio-system/nginx-gateway
+  http:
+    - name: primary
+      route:
+        - destination:
+            host: nginx-stable.production.svc.cluster.local
+          weight: 100
+        - destination:
+            host: nginx-canary.production.svc.cluster.local
+          weight: 0
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: production
+spec:
+  metrics:
+    - name: error-rate
+      interval: 30s
+      successCondition: result < 0.05    # error rate below 5% = success
+      failureCondition: result > 0.1     # error rate above 10% = abort & rollback
+      failureLimit: 2                    # allow up to 2 failures before acting
+      provider:
+        prometheus:
+          address: http://prometheus:9090
+          query: |
+            sum(rate(http_requests_total{status=~"5.."}[2m]))
+            /
+            sum(rate(http_requests_total[2m]))
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: nginx-rollout
+  namespace: production
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+  strategy:
+    canary:
+      # Limit canary pod count to 2 during early steps (saves resources)
+      replicas: 2
+
+      stableService: nginx-stable
+      canaryService: nginx-canary
+
+      trafficRouting:
+        istio:
+          virtualService:
+            name: nginx-vsvc
+            routes:
+              - primary
+
+      # Attach error‑rate analysis to the rollout
+      analysis:
+        templates:
+          - templateName: success-rate
+        startingStep: 1               # start after the first 5% step
+        args:
+          - name: service-name
+            value: nginx-canary
+
+      steps:
+        - setWeight: 5
+        - pause: { duration: 60s }
+
+        - setWeight: 20
+        - pause: { duration: 2m }
+
+        - setWeight: 50
+        - pause: { duration: 5m }
+
+        - setWeight: 100
+        - pause: { duration: 2m }     # final verification before promotion
+---
+# Optional: RBAC for Argo Rollouts to patch Services and VirtualServices
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-rollouts-istio
+rules:
+  - apiGroups: ["networking.istio.io"]
+    resources: ["virtualservices"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-rollouts-istio-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-rollouts-istio
+subjects:
+  - kind: ServiceAccount
+    name: argo-rollouts               # verify this matches your Argo Rollouts controller's service account
+    namespace: argo-rollouts
