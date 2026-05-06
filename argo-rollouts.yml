@@ -1,104 +1,104 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx-stable
-  namespace: production
-spec:
-  selector:
-    app: nginx
-  ports:
-    - port: 80
-      targetPort: 80
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx-canary
-  namespace: production
-spec:
-  selector:
-    app: nginx
-  ports:
-    - port: 80
-      targetPort: 80
----
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: nginx-vsvc
-  namespace: production
-spec:
-  hosts:
-    - nginx.example.com
-  gateways:
-    - istio-system/ingressgateway
-  http:
-    - name: primary
-      route:
-        - destination:
-            host: nginx-stable
-          weight: 100
-        - destination:
-            host: nginx-canary
-          weight: 0
----
-apiVersion: argoproj.io/v1alpha1
-kind: Rollout
-metadata:
-  name: nginx-rollout
-  namespace: production
-spec:
-  replicas: 6
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: nginx-stable
+#   namespace: production
+# spec:
+#   selector:
+#     app: nginx
+#   ports:
+#     - port: 80
+#       targetPort: 80
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: nginx-canary
+#   namespace: production
+# spec:
+#   selector:
+#     app: nginx
+#   ports:
+#     - port: 80
+#       targetPort: 80
+# ---
+# apiVersion: networking.istio.io/v1beta1
+# kind: VirtualService
+# metadata:
+#   name: nginx-vsvc
+#   namespace: production
+# spec:
+#   hosts:
+#     - nginx.example.com
+#   gateways:
+#     - istio-system/ingressgateway
+#   http:
+#     - name: primary
+#       route:
+#         - destination:
+#             host: nginx-stable
+#           weight: 100
+#         - destination:
+#             host: nginx-canary
+#           weight: 0
+# ---
+# apiVersion: argoproj.io/v1alpha1
+# kind: Rollout
+# metadata:
+#   name: nginx-rollout
+#   namespace: production
+# spec:
+#   replicas: 6
 
-  strategy:
-    canary:
-      stableService: nginx-stable
-      canaryService: nginx-canary
+#   strategy:
+#     canary:
+#       stableService: nginx-stable
+#       canaryService: nginx-canary
 
-      trafficRouting:
-        istio:
-          virtualService:
-            name: nginx-vsvc
-            routes:
-              - primary
+#       trafficRouting:
+#         istio:
+#           virtualService:
+#             name: nginx-vsvc
+#             routes:
+#               - primary
 
-      steps:
-        - setWeight: 5
-        - pause: {}     # 🔴 manual approval
+#       steps:
+#         - setWeight: 5
+#         - pause: {}     # 🔴 manual approval
 
-        - setWeight: 20
-        - pause: {}     # 🔴 manual approval
+#         - setWeight: 20
+#         - pause: {}     # 🔴 manual approval
 
-        - setWeight: 50
-        - pause: {}     # 🔴 manual approval
+#         - setWeight: 50
+#         - pause: {}     # 🔴 manual approval
 
-        - setWeight: 100
+#         - setWeight: 100
 
-  selector:
-    matchLabels:
-      app: nginx
+#   selector:
+#     matchLabels:
+#       app: nginx
 
-  template:
-    metadata:
-      labels:
-        app: nginx
-    spec:
-      containers:
-        - name: nginx
-          image: nginx:1.25
-          ports:
-            - containerPort: 80
+#   template:
+#     metadata:
+#       labels:
+#         app: nginx
+#     spec:
+#       containers:
+#         - name: nginx
+#           image: nginx:1.25
+#           ports:
+#             - containerPort: 80
 
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: 3
-            periodSeconds: 10
+#           readinessProbe:
+#             httpGet:
+#               path: /
+#               port: 80
+#             initialDelaySeconds: 3
+#             periodSeconds: 10
 
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: 10
-            periodSeconds: 20
+#           livenessProbe:
+#             httpGet:
+#               path: /
+#               port: 80
+#             initialDelaySeconds: 10
+#             periodSeconds: 20
