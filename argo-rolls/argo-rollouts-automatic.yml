@@ -118,12 +118,12 @@ spec:
       stableService: nginx-stable
       canaryService: nginx-canary
 
-      trafficRouting:
-        istio:
-          virtualService:
-            name: nginx-vsvc
-            routes:
-              - primary
+      # trafficRouting:
+      #   istio:
+      #     virtualService:
+      #       name: nginx-vsvc
+      #       routes:
+      #         - primary
 
       # # Attach error‑rate analysis to the rollout
       # analysis:
