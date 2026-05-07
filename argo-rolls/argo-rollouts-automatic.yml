@@ -125,14 +125,14 @@ spec:
             routes:
               - primary
 
-      # Attach error‑rate analysis to the rollout
-      analysis:
-        templates:
-          - templateName: success-rate
-        startingStep: 1               # start after the first 5% step
-        args:
-          - name: service-name
-            value: nginx-canary
+      # # Attach error‑rate analysis to the rollout
+      # analysis:
+      #   templates:
+      #     - templateName: success-rate
+      #   startingStep: 1               # start after the first 5% step
+      #   args:
+      #     - name: service-name
+      #       value: nginx-canary
 
       steps:
         - setWeight: 5
